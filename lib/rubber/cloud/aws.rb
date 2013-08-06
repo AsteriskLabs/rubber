@@ -22,7 +22,7 @@ module Rubber
         @table_store = ::Fog::AWS::SimpleDB.new(compute_credentials)
         
         compute_credentials[:region] = env.region
-        @elb = ::Fog::AWS::ELB.new(compute_credentials)
+        @elb = ::Fog::AWS::ELB.new(compute_credentials.merge(:region=>env.region))
 
         compute_credentials[:provider] = 'AWS' # We need to set the provider after the SimpleDB init because it fails if the provider value is specified.
 
@@ -189,7 +189,7 @@ module Rubber
           item.listeners.each do |litem|
             listener = {}
             listener[:protocol] = litem.protocol
-            listener[:port] = litem.lb_portPort
+            listener[:port] = litem.lb_port
             listener[:instance_port] = litem.instance_port
             lb[:listeners] ||= []
             lb[:listeners] << listener
