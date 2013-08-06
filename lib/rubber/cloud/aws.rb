@@ -210,6 +210,14 @@ module Rubber
         return lbs
       end
 
+      def dereg_instance_from_lb(instace_id,lb_name)
+        tmp_instids = []
+        tmp_instids << instace_id
+        response = @elb.deregister_instances_from_load_balancer(tmp_instids,lb_name)
+
+        return response
+      end
+
       def describe_availability_zones
         zones = []
         response = @compute_provider.describe_availability_zones()
