@@ -195,6 +195,16 @@ module Rubber
             lb[:listeners] << listener
           end
 
+          response2 = @elb.describe_instance_health(lb[:name])
+          response2.body['DescribeInstanceHealthResult']['InstanceStates'].each do |lb_inst|
+            lb_instance = {}
+            lb_instance[:id] = lb_inst['InstanceId']
+            lb_instance[:state] = lb_inst['State']
+            lb_instance[:desc] = lb_inst['Description']
+            lb[:instances] ||= []
+            lb[:instances] << lb_instance
+          end
+
           lbs << lb
         end
         return lbs
