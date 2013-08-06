@@ -19,6 +19,23 @@ namespace :rubber do
       end
       send task_name
     end
+
+    desc <<-DESC
+     Restore a local database file over the current database - MAY DROP TABLES - only for psql - USE AT OWN RISK
+    DESC
+    task :restore do
+      master_instances = rubber_instances.for_role('db','primary' => true)
+
+      filename = get_env('FILENAME',"The full path to the backed up SQL dump (i.e. /home/ubuntu/production_dump.sql)",true)
+
+      for instance in master_instances
+        task_name = "_restore_db_file_#{instance.full_name}".to_sym()
+        task task_name, :hosts => instance.full_name do
+          rsudo "cd #{current_path} && RUBBER_ENV=#{Rubber.env} psql -U #{rubber_env.db_user} -d #{rubber_env.db_name} -h #{instance.full_name} < #{filename}"
+        end
+        send task_name
+      end
+    end
     
     desc <<-DESC
       Restore database from cloud using rubber util:restore_db
