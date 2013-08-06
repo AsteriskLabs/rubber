@@ -31,7 +31,7 @@ namespace :rubber do
       for instance in master_instances
         task_name = "_restore_db_file_#{instance.full_name}".to_sym()
         task task_name, :hosts => instance.full_name do
-          rsudo "cd #{current_path} && RUBBER_ENV=#{Rubber.env} psql -U #{rubber_env.db_user} -d #{rubber_env.db_name} -h #{instance.full_name} < #{filename}"
+          rsudo "psql -U #{rubber_env.db_user} -d #{rubber_env.db_name} -h #{instance.full_name} < #{filename}"
         end
         send task_name
       end
