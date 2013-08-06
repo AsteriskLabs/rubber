@@ -210,10 +210,18 @@ module Rubber
         return lbs
       end
 
-      def dereg_instance_from_lb(instace_id,lb_name)
+      def dereg_instance_from_lb(instance_id,lb_name)
         tmp_instids = []
-        tmp_instids << instace_id
+        tmp_instids << instance_id
         response = @elb.deregister_instances_from_load_balancer(tmp_instids,lb_name)
+
+        return response
+      end
+
+      def reg_instance_to_lb(instance_id,lb_name)
+        tmp_instids = []
+        tmp_instids << instance_id
+        response = @elb.register_instances_with_load_balancer(tmp_instids,lb_name)
 
         return response
       end

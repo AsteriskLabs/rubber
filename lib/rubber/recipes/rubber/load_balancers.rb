@@ -25,6 +25,17 @@ namespace :rubber do
     pp resp
   end
 
+  desc <<-DESC
+   Register an instance into an ELB
+  DESC
+  required_task :reg_elb_instance do
+    instance = get_env('EID',"Instance id (e.g. i-05a00b12)",true)
+    lb_name = get_env('LBNAME',"Load balancer name",true)
+    resp = cloud.reg_instance_to_lb(instance,lb_name)
+    pp resp
+  end
+
+
   def setup_load_balancers
     # OPTIONAL: Automatically provision and assign instances to a Cloud provided
     # load balancer.
