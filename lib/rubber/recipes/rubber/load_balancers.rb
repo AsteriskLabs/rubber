@@ -7,13 +7,13 @@ namespace :rubber do
   #  setup_load_balancers()
   #end
   #
-  #desc <<-DESC
-  #  Describes the network load balancers
-  #DESC
-  #required_task :describe_load_balancers do
-  #  lbs = cloud.describe_load_balancers()
-  #  pp lbs
-  #end
+  desc <<-DESC
+   Describes the network load balancers
+  DESC
+  required_task :describe_load_balancers do
+   lbs = cloud.describe_load_balancers()
+   pp lbs
+  end
 
   def setup_load_balancers
     # OPTIONAL: Automatically provision and assign instances to a Cloud provided
