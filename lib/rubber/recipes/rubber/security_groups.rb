@@ -36,11 +36,25 @@ namespace :rubber do
   required_task :security_group_lockdown do
     groups = cloud.describe_security_groups()
     groups.each do |group|
-      pp group
       group[:permissions].each do |perm|
-       if perm[:protocol] == "tcp" and perm[:from_port] == "22" and perm[:to_port] == "22" then
-        puts "#{group[:name]}, #{group[:description]}" 
-       end
+         # skip those groups that don't belong to this project/env
+         envv = rubber_cfg.environment.bind([],nil)
+         next if envv.isolate_security_groups && group[:name] !~ /^#{envv.app_name}_#{Rubber.env}_/
+         if perm[:protocol] == "tcp" and perm[:from_port] == 22 and perm[:to_port] == 22 then
+          from = ""
+          from = "source_groups: #{perm[:source_groups].collect {|g| g[:name]}.join(", ") }" if perm[:source_groups]
+          from += "source_ips: #{perm[:source_ips].join(", ") }" if perm[:source_ips]
+          answer = Capistrano::CLI.ui.ask("#{group[:name]}, #{group[:description]} includes SSH from\n#{from}\n..remove from cloud? [y/N]: ")
+
+          if answer =~ /^y/
+            if perm[:source_groups]
+            elsif perm[:source_ips]
+              perm[:source_ips].each do |source_ip|
+                cloud.remove_security_group_rule(group[:name], perm[:protocol], perm[:from_port], perm[:to_port], source_ip)
+              end
+            end
+          end
+        end
       end if group[:permissions]
     end
   end
