@@ -30,6 +30,20 @@ namespace :rubber do
     end
   end
 
+  desc <<-DESC
+    Removes external SSH rules from the network security groups
+  DESC
+  required_task :security_group_lockdown do
+    groups = cloud.describe_security_groups()
+    groups.each do |group|
+      group[:permissions].each do |perm|
+       if perm[:protocol] == "tcp" and perm[:from_port] == "22" and perm[:to_port] == "22" then
+        puts "#{group[:name]}, #{group[:description]}" 
+       end
+      end
+    end
+  end
+
 
   def get_assigned_security_groups(host=nil, roles=[])
     env = rubber_cfg.environment.bind(roles, host)
