@@ -40,7 +40,7 @@ namespace :rubber do
        if perm[:protocol] == "tcp" and perm[:from_port] == "22" and perm[:to_port] == "22" then
         puts "#{group[:name]}, #{group[:description]}" 
        end
-      end
+      end if group[:permissions]
     end
   end
 
