@@ -36,6 +36,7 @@ namespace :rubber do
   required_task :security_group_lockdown do
     groups = cloud.describe_security_groups()
     groups.each do |group|
+      pp group
       group[:permissions].each do |perm|
        if perm[:protocol] == "tcp" and perm[:from_port] == "22" and perm[:to_port] == "22" then
         puts "#{group[:name]}, #{group[:description]}" 
