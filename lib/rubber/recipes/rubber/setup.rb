@@ -26,7 +26,15 @@ namespace :rubber do
     # We special-case the 'ubuntu' user since the Canonical AMIs on EC2 don't set the password for
     # this account, making any password prompt potentially confusing.
     orig_password = fetch(:password)
-    set(:password, initial_ssh_user == 'ubuntu' || ENV.has_key?('RUN_FROM_VAGRANT') ? nil : Capistrano::CLI.password_prompt("Password for #{initial_ssh_user} @ #{ip}: "))
+    initial_ssh_password = fetch(:initial_ssh_password, nil)
+
+    if initial_ssh_user == 'ubuntu' || ENV.has_key?('RUN_FROM_VAGRANT')
+      set(:password, nil)
+    elsif initial_ssh_password
+      set(:password, initial_ssh_password)
+    else
+      set(:password, Capistrano::CLI.password_prompt("Password for #{initial_ssh_user} @ #{ip}: "))
+    end
 
     task :_ensure_key_file_present, :hosts => "#{initial_ssh_user}@#{ip}" do
       public_key_filename = "#{cloud.env.key_file}.pub"
@@ -50,9 +58,19 @@ namespace :rubber do
       rsudo "mkdir -p /root/.ssh && cp /home/#{initial_ssh_user}/.ssh/authorized_keys /root/.ssh/"
     end
 
+    task :_disable_password_based_ssh_login, :hosts => "#{initial_ssh_user}@#{ip}" do
+      rubber.sudo_script 'disable_password_based_ssh_login', <<-ENDSCRIPT
+        if ! grep -q 'PasswordAuthentication no' /etc/ssh/sshd_config; then
+          echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config
+          service ssh restart
+        fi
+      ENDSCRIPT
+    end
+
     begin
       _ensure_key_file_present
       _allow_root_ssh
+      _disable_password_based_ssh_login if cloud.should_disable_password_based_ssh_login?
     rescue ConnectionError => e
       if e.message =~ /Net::SSH::AuthenticationFailed/
         logger.info "Can't connect as user #{initial_ssh_user} to #{ip}, assuming root allowed"
@@ -124,11 +142,16 @@ namespace :rubber do
     local_hosts << delim << "\n"
 
     # Write out the hosts file for this machine, use sudo
-    filtered = File.read(hosts_file).gsub(/^#{delim}.*^#{delim}\n?/m, '')
-    logger.info "Writing out aliases into local machines #{hosts_file}, sudo access needed"
-    Rubber::Util::sudo_open(hosts_file, 'w') do |f|
-      f.write(filtered)
-      f.write(local_hosts)
+    existing = File.read(hosts_file)
+    filtered = existing.gsub(/^#{delim}.*^#{delim}\n?/m, '')
+
+    # only write out if it has changed
+    if existing != (filtered + local_hosts)
+      logger.info "Writing out aliases into local machines #{hosts_file}, sudo access needed"
+      Rubber::Util::sudo_open(hosts_file, 'w') do |f|
+        f.write(filtered)
+        f.write(local_hosts)
+      end
     end
   end
 
@@ -164,15 +187,25 @@ namespace :rubber do
 
       replace="#{delim}\\n#{remote_hosts.join("\\n")}\\n#{delim}"
 
-      rubber.sudo_script 'setup_remote_aliases', <<-ENDSCRIPT
+      setup_remote_aliases_script = <<-ENDSCRIPT
         sed -i.bak '/#{delim}/,/#{delim}/c #{replace}' /etc/hosts
         if ! grep -q "#{delim}" /etc/hosts; then
           echo -e "#{replace}" >> /etc/hosts
         fi
       ENDSCRIPT
 
+      # If an SSH gateway is being used to deploy to the cluster, we need to ensure that gateway has an updated /etc/hosts
+      # first, otherwise it won't be able to resolve the hostnames for the other servers we need to connect to.
+      gateway = fetch(:gateway, nil)
+      if gateway
+        rubber.sudo_script 'setup_remote_aliases', setup_remote_aliases_script, :hosts => gateway
+      end
+
+      rubber.sudo_script 'setup_remote_aliases', setup_remote_aliases_script
+
       # Setup hostname on instance so shell, etcs have nice display
       rsudo "echo $CAPISTRANO:HOST$ > /etc/hostname && hostname $CAPISTRANO:HOST$"
+
       # Newer ubuntus ec2-init script always resets hostname, so prevent it
       rsudo "mkdir -p /etc/ec2-init && echo compat=0 > /etc/ec2-init/is-compat-env"
     end
@@ -327,7 +360,8 @@ namespace :rubber do
     core_packages = [
         'python-software-properties', # Needed for add-apt-repository, which we use for adding PPAs.
         'bc',                         # Needed for comparing version numbers in bash, which we do for various setup functions.
-        'update-notifier-common'      # Needed for notifying us when a package upgrade requires a reboot.
+        'update-notifier-common',     # Needed for notifying us when a package upgrade requires a reboot.
+        'scsitools'                   # Needed to rescan SCSI channels for any added devices.
     ]
 
     rsudo "apt-get -q update"
@@ -474,6 +508,7 @@ namespace :rubber do
       # graphite web app)
       if instance_item.role_names.include?('web_tools')
         Array(rubber_env.web_tools_proxies).each do |name, settings|
+          name = name.gsub('_', '-')
           provider.update("#{name}-#{instance_item.name}", instance_item.external_ip)
         end
       end
@@ -514,7 +549,11 @@ namespace :rubber do
 
     rsudo "apt-get -q update"
     if upgrade
-      rsudo "export DEBIAN_FRONTEND=noninteractive; apt-get -q -o Dpkg::Options::=--force-confold -y --force-yes dist-upgrade"
+      if ENV['NO_DIST_UPGRADE']
+        rsudo "export DEBIAN_FRONTEND=noninteractive; apt-get -q -o Dpkg::Options::=--force-confold -y --force-yes upgrade"
+      else
+        rsudo "export DEBIAN_FRONTEND=noninteractive; apt-get -q -o Dpkg::Options::=--force-confold -y --force-yes dist-upgrade"
+      end
     else
       rsudo "export DEBIAN_FRONTEND=noninteractive; apt-get -q -o Dpkg::Options::=--force-confold -y --force-yes install $CAPISTRANO:VAR$", opts
     end
@@ -556,6 +595,8 @@ namespace :rubber do
       end
 
       reboot = get_env('REBOOT', "Updates require a reboot on hosts #{reboot_hosts.inspect}, reboot [y/N]?", false)
+      ENV['REBOOT'] = reboot # `get_env` chomps the REBOOT value of the env, so reset it here so the value is retained across multiple calls.
+
       reboot = (reboot =~ /^y/)
 
       if reboot
