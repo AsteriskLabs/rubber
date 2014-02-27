@@ -98,6 +98,10 @@ module Rubber
         vm['new_vm']['id']
       end
 
+      def destroy_instance(instance_id)
+        compute_provider.servers.get(instance_id).destroy(:force => true)
+      end
+
       def describe_instances(instance_id=nil)
         instances = []
         opts = {}
@@ -137,7 +141,7 @@ module Rubber
 
           instance[:region_id] = item.datacenter
           instance[:provider] = 'vsphere'
-          instance[:platform] = 'linux'
+          instance[:platform] = Rubber::Platforms::LINUX
           instances << instance
         end
 
