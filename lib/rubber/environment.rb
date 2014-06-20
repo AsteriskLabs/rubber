@@ -2,7 +2,7 @@ require 'yaml'
 require 'socket'
 require 'delegate'
 require 'monitor'
-require 'rubber/encryption'
+require 'rbconfig'
 
 
 module Rubber
@@ -53,8 +53,18 @@ module Rubber
         bound = bind()
         @config_secret = bound.rubber_secret
         if @config_secret
+
+          # The config_secret value should point to a file outside of the project directory. When run locally, rubber
+          # will be able to read this file directly. In order to support deploys without having to commit this file,
+          # rubber will SCP the file up as part of the deploy. In that case, the file can be found in config_root and
+          # will have the same base name. If the file doesn't exist locally, we'll assume it's a deployed location
+          # and read the file from config_root.
+          @config_secret = "#{@config_root}/#{File.basename(@config_secret)}" unless File.exist?(@config_secret)
+
           obfuscation_key = bound.rubber_secret_key
           if obfuscation_key
+            require 'rubber/encryption'
+
             read_config(@config_secret) do |data|
               Rubber::Encryption.decrypt(data, obfuscation_key)
             end
@@ -241,7 +251,19 @@ module Rubber
 
           global
         end
-        
+
+        def local_platform
+          RbConfig::CONFIG['host_os'] =~ /mswin|mingw/ ? 'windows' : 'posix'
+        end
+
+        def local_windows?
+          local_platform == 'windows'
+        end
+
+        def local_posix?
+          local_platform == 'posix'
+        end
+
         def method_missing(method_id)
           self[method_id.id2name]
         end

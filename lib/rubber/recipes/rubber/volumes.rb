@@ -44,10 +44,11 @@ namespace :rubber do
     deploy_to = fetch(:deploy_to, nil)
 
     unless deploy_to.nil?
-      deployed = capture("echo $(ls /var/run/reboot-required 2> /dev/null)")
+      deployed = capture("echo $(ls #{deploy_to} 2> /dev/null)")
 
-      unless deployed
+      if deployed.strip.size == 0
         set :rubber_code_was_updated, false
+        set :rubber_config_files_pushed, false
       end
     end
   end

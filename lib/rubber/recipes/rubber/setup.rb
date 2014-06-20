@@ -6,9 +6,28 @@ namespace :rubber do
     Bootstraps instances by setting timezone, installing packages and gems
   DESC
   task :bootstrap do
+    # This special piece of Hell is designed to work around callback lifecyle issues and problems associated with
+    # remounting the :deploy_to directory.  The problem is that depending on the filesystem type and whether LLVM is
+    # used, we may need to install packages before we can setup volumes.  However, most end user custom installation
+    # tasks will be configured as "after 'rubber:install_packages'", meaning they'll trigger before the volumes are set
+    # up. While this is safe, it can be very costly.  If :deploy_to is set to '/mnt/myapp-production', for instance,
+    # and we mount a new volume to /mnt, then everything in /mnt will go away and need to be reconstituted.  Rubber
+    # ensures that the correct thing will happen, so there's no correctness issue.  But, if any of those callbacks ran
+    # something like :update_code_for_bootstrap, then several costly operations will be run twice, such as uploading
+    # the code to be deployed and bundle installing gems.  The first time will be in that callback, the second time
+    # will be as part of the normal deploy, after /mnt has been remounted and thus, cleared.
+    #
+    # In order to avoid effectively deploying the app twice in many circumstances, we rebind all
+    # "after 'rubber:install_packages'" callbacks to be "after 'rubber:setup_volumes'".  This allows end-user
+    # configuration to still hook after package installation for normal case operation, while allowing rubber to run
+    # semi-performantly when bootstrapping.
+
+    rebind_after_install_packages_callbacks('rubber:setup_volumes')
+
     link_bash
     set_timezone
     enable_multiverse
+    configure_package_manager_mirror
     install_core_packages
     upgrade_packages
     install_packages
@@ -16,6 +35,15 @@ namespace :rubber do
     setup_gem_sources
     install_gems
     deploy.setup
+  end
+
+  def rebind_after_install_packages_callbacks(new_after_task)
+    install_package_task = find_task(:install_packages)
+
+    after_install_packages_callbacks = []
+    callbacks[:after].delete_if { |c| after_install_packages_callbacks << c if c.applies_to?(install_package_task) }
+
+    after_install_packages_callbacks.each { |c| after(new_after_task, c.source) }
   end
 
   # Sets up instance to allow root access (e.g. recent canonical AMIs)
@@ -117,28 +145,48 @@ namespace :rubber do
     Generates/etc/hosts for local machine
   DESC
   required_task :setup_local_aliases do
-    hosts_file = '/etc/hosts'
+    hosts_file = rubber_env.local_windows? ?
+        "#{ENV['windir']}\\System32\\drivers\\etc\\hosts" :
+        '/etc/hosts'
 
     # Generate /etc/hosts contents for the local machine from instance config
     delim = "## rubber config #{rubber_env.domain} #{Rubber.env}"
     local_hosts = delim + "\n"
     rubber_instances.each do |ic|
-      # don't add unqualified hostname in local hosts file since user may be
-      # managing multiple domains with same aliases
-      hosts_data = [ic.full_name, ic.external_host, ic.internal_host]
 
-      # add the ip aliases for web tools hosts so we can map internal tools
-      # to their own vhost to make proxying easier (rewriting url paths for
-      # proxy is a real pain, e.g. '/graphite/' externally to '/' on the
-      # graphite web app)
-      if ic.role_names.include?('web_tools')
-        Array(rubber_env.web_tools_proxies).each do |name, settings|
-          hosts_data << "#{name}-#{ic.full_name}"
+      if rubber_env.local_windows?
+
+        hosts_data = [ic.full_name, ic.internal_host]
+
+        if ic.role_names.include?('web_tools')
+          Array(rubber_env.web_tools_proxies).each do |name, settings|
+            hosts_data << "#{name}-#{ic.full_name}"
+          end
         end
-      end
 
-      local_hosts << ic.external_ip << ' ' << hosts_data.join(' ') << "\n"
+        hosts_data.compact.each do |host_name|
+          local_hosts << ic.external_ip.ljust(18) << host_name << "\n"
+        end
+
+      else # non-Windows OS
+        # don't add unqualified hostname in local hosts file since user may be
+        # managing multiple domains with same aliases
+        hosts_data = [ic.full_name, ic.external_host, ic.internal_host]
+
+        # add the ip aliases for web tools hosts so we can map internal tools
+        # to their own vhost to make proxying easier (rewriting url paths for
+        # proxy is a real pain, e.g. '/graphite/' externally to '/' on the
+        # graphite web app)
+        if ic.role_names.include?('web_tools')
+          Array(rubber_env.web_tools_proxies).each do |name, settings|
+            hosts_data << "#{name}-#{ic.full_name}"
+          end
+        end
+
+        local_hosts << ic.external_ip << ' ' << hosts_data.compact.join(' ') << "\n"
+      end
     end
+
     local_hosts << delim << "\n"
 
     # Write out the hosts file for this machine, use sudo
@@ -147,10 +195,25 @@ namespace :rubber do
 
     # only write out if it has changed
     if existing != (filtered + local_hosts)
-      logger.info "Writing out aliases into local machines #{hosts_file}, sudo access needed"
-      Rubber::Util::sudo_open(hosts_file, 'w') do |f|
-        f.write(filtered)
-        f.write(local_hosts)
+      if rubber_env.local_windows?
+        logger.info "Writing out aliases into local machines #{hosts_file}"
+
+        begin
+          File.open(hosts_file, 'w') do |f|
+            f.write(filtered)
+            f.write(local_hosts)
+          end
+        rescue
+          error_msg = "Could not modify #{hosts_file} on local machine."
+          error_msg += ' Please ensure you are running command as Administrator.'
+          abort error_msg
+        end
+      else # non-Windows OS
+        logger.info "Writing out aliases into local machines #{hosts_file}, sudo access needed"
+        Rubber::Util::sudo_open(hosts_file, 'w') do |f|
+          f.write(filtered)
+          f.write(local_hosts)
+        end
       end
     end
   end
@@ -323,6 +386,16 @@ namespace :rubber do
   end
 
   desc <<-DESC
+    Updates the mirror used for the primary packages installed by the package manager.
+  DESC
+  task :configure_package_manager_mirror do
+    if rubber_env.package_manager_mirror
+      # This will swap out deb lines that point at a URL while skipping over sources like "deb cdrom".
+      rsudo "sed -i.bak -r \"s/(deb|deb-src) [^ :]+:\\/\\/[^ ]+ (.*)/\\1 #{rubber_env.package_manager_mirror.gsub('/', '\\/')} \\2/g\" /etc/apt/sources.list"
+    end
+  end
+
+  desc <<-DESC
     Update to the newest versions of all packages/gems.
   DESC
   task :update do
@@ -358,7 +431,8 @@ namespace :rubber do
   DESC
   task :install_core_packages do
     core_packages = [
-        'python-software-properties', # Needed for add-apt-repository, which we use for adding PPAs.
+        'python-software-properties', # Needed for add-apt-repository (<= Ubuntu 12.04), which we use for adding PPAs.
+        'software-properties-common', # Needed for add-apt-repository (> Ubuntu 12.04), which we use for adding PPAs.
         'bc',                         # Needed for comparing version numbers in bash, which we do for various setup functions.
         'update-notifier-common',     # Needed for notifying us when a package upgrade requires a reboot.
         'scsitools'                   # Needed to rescan SCSI channels for any added devices.

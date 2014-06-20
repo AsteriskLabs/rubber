@@ -1,3 +1,113 @@
+2.10.0 (06/17/2014)
+
+Improvements:
+============
+
+[delayed_job] Added :kill and :status tasks. <52b593e>
+[delayed_job] Run in bundle exec context. <52b593e>
+[delayed_job] Move monit-delayed_job.conf inside the monit vulcanizer, as is the standard for all other templates. <52b593e>
+[delayed_job] Added PID file control. <52b593e>
+[delayed_job] Monit now has a 10-minute timeout because the PID file being monitored is not generated until after delayed_job daemonizes. <52b593e>
+[passenger_nginx] Install Passenger/Nginx from packages instead of building by hand. <103feee, 0c6eb6a, 499c08c, 9a88ffe>
+[passenger_nginx] Remove unneeded deploy.task blocks. <1b9b252>
+[passenger_nginx] Removed munin passenger plugins. <a91f837>
+[unicorn] Standardized Rake names with init script names (use terms "upgrade" and "kill"). <4c616ba>
+[unicorn] Increased Unicorn upgrade timeout to 10 mins. <4c616ba>
+[unicorn] Clarified log messages. <4c616ba>
+[unicorn] Allow setting PID file and number of workers from Rubber config. <4c616ba>
+
+Bug Fixes:
+=========
+
+[core] Fixed template calls to rubber.run_config (a regression introduced in 2.9.0). <66310a5>
+[unicorn] Fixed unicorn init script. <4c616ba>
+
+
+2.9.0 (06/02/2014)
+
+New Features:
+============
+
+[core] Added support for private networking in Digital Ocean. <aee6114, c2c2059, 83fa02e, dbced9d, b1c9564, 54d6405, 55f7e13, bc1a05a>
+[core, local_windows] Support for using rubber on Windows. <738cd3f, dd049bf, bd82f2a, 6bd51e7, f199cad, cfa3012, 329acad, 0b0afa3, 86bf2d0>
+
+Improvements:
+============
+
+[delayed_job] Added Rails 4 compatibility. <c374142, 982f08b, 2f49cf7>
+
+Bug Fixes:
+=========
+
+[base] Updated the Digital Ocean image to one that works. <48f7984>
+
+
+2.8.1 (05/01/2014)
+
+Bug Fixes:
+=========
+
+[core] Detect alternate location of secret file when it is moved into the /config/rubber dir on remote servers. <9bd12ad>
+[core] Make sure add-apt-repository is available on Ubuntu > 12.04. <36c423d>
+[core] Fixed compatibility with Vagrant 1.5.x. <55416f8>
+[selenium_grid_hub] Replaced hard-coded app user with app_user variable. <afc7e9c>
+[selenium_grid_hub] Fixed dynamic MaxPermSize. <abd46cd>
+[web_tools] Underscores aren't valid in hostname, so convert to hyphens like we do everywhere else. <bbe0b81>
+
+
+2.8.0 (03/30/2014)
+
+New Features:
+============
+
+[base, core] Added the ability to specify a package manager mirror for faster package installation. <a127846>
+
+Improvements:
+============
+
+[base] Use binstubs if available in the rubber script since it can be much faster, particularly on JRuby. <eefa30e>
+[core] Suppress dpkg output to cut down on noise in setting up iptables firewall rules. <59997aa>
+[core] Only upload the rubber config once, rather than everytime run_config is called. <1b14e73>
+[core] There's no need to specially upload rubber config files when using a non-SCM deploy strategy. <3227440>
+[core] Prevent tasks from running multiple times if mounting a volume to a location that would blow away the deploy directory. <c222684>
+[core] Sped up config file transformation a bit by cutting down on file system operations. <5623fac>
+[core] Defer loading of rubber encryption code until it's actually needed.
+
+Bug Fixes:
+=========
+
+[core] Fixed a bad env var reference in setting up iptables firewall rules. <1dc844a>
+
+
+2.7.5 (03/28/2014)
+
+Improvements:
+============
+
+[base] Upgraded ruby-build from 20140210 to 20140225 and bumped the default ruby version from 1.9.3-p484 to 2.0.0-p451. <396b72e>
+[core] Install iptables if it's not already installed and it's needed to set up (non-EC2) firewall rules. <581c2e0>
+[redis] Upgraded from redis 2.8.7 to 2.8.8. <8775a76>
+
+Bug Fixes:
+=========
+
+[core] Fixed a problem whereby if a part of the :deploy_to path (e.g., /mnt) is remounted with an attached volume, the code may not deploy properly. <a98edcc>
+
+
+2.7.4 (03/13/2014)
+
+Improvements:
+============
+
+[graylog] Upgraded from Graylog 0.20.0 RC1 to 0.20.1. <67c3c77, 726b00a>
+[redis] Upgraded from redis 2.8.5 to 2.8.7. <60e2e2b, 20ea7bc>
+
+Bug Fixes:
+=========
+
+[core] Only upload the iptables persistence scripts to the host that the rules are being generated for. <f6db5ed>
+
+
 2.7.3 (02/12/2014)
 
 Improvements:

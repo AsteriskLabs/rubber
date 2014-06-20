@@ -31,11 +31,11 @@ module Rubber
 
       def create_instance(instance_alias, ami, ami_type, security_groups, availability_zone, region)
         response = compute_provider.servers.create(:image_id => ami,
-                                                    :flavor_id => ami_type,
-                                                    :groups => security_groups,
-                                                    :availability_zone => availability_zone,
-                                                    :key_name => env.key_name,
-                                                    :name => instance_alias)
+                                                   :flavor_id => ami_type,
+                                                   :groups => security_groups,
+                                                   :availability_zone => availability_zone,
+                                                   :key_name => env.key_name,
+                                                   :name => instance_alias)
 
         response.id
       end
@@ -49,34 +49,37 @@ module Rubber
       end
   
       def reboot_instance(instance_id)
-        response = compute_provider.servers.get(instance_id).reboot()
+        compute_provider.servers.get(instance_id).reboot()
       end
 
       def stop_instance(instance, force=false)
         # Don't force the stop process. I.e., allow the instance to flush its file system operations.
-        response = compute_provider.servers.get(instance.instance_id).stop(force)
+        compute_provider.servers.get(instance.instance_id).stop(force)
       end
 
       def start_instance(instance)
-        response = compute_provider.servers.get(instance.instance_id).start()
+        compute_provider.servers.get(instance.instance_id).start()
       end
 
       def create_static_ip
         address = compute_provider.addresses.create()
-        return address.public_ip
+
+        address.public_ip
       end
 
       def attach_static_ip(ip, instance_id)
         address = compute_provider.addresses.get(ip)
         server = compute_provider.servers.get(instance_id)
         response = (address.server = server)
-        return ! response.nil?
+
+        ! response.nil?
       end
 
       def detach_static_ip(ip)
         address = compute_provider.addresses.get(ip)
         response = (address.server = nil)
-        return ! response.nil?
+
+        ! response.nil?
       end
 
       def describe_static_ips(ip=nil)
@@ -90,12 +93,13 @@ module Rubber
           ip[:ip] = item.public_ip
           ips << ip
         end
-        return ips
+
+        ips
       end
 
       def destroy_static_ip(ip)
         address = compute_provider.addresses.get(ip)
-        return address.destroy
+        address.destroy
       end
 
       def create_image(image_name)
@@ -114,7 +118,8 @@ module Rubber
           image[:root_device_type] = item.root_device_type
           images << image
         end
-        return images
+
+        images
       end
 
       def destroy_image(image_id)

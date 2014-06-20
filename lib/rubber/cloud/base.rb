@@ -97,7 +97,7 @@ module Rubber
       end
 
       def setup_security_groups(host=nil, roles=[])
-        raise "Digital Ocean provider can only set up one host a time" if host.split(',').size != 1
+        raise "Provider can only set up security groups for one host a time" if host.split(',').size != 1
 
         rubber_cfg = Rubber::Configuration.get_configuration(Rubber.env)
         scoped_env = rubber_cfg.environment.bind(roles, host)
@@ -114,6 +114,11 @@ module Rubber
         groups = isolate_groups(groups)
 
         script = <<-ENDSCRIPT
+          # Install iptables if it's not already installed.
+          if ! dpkg -l iptables &> /dev/null; then
+            export DEBIAN_FRONTEND=noninteractive; apt-get -q -o Dpkg::Options::=--force-confold -y --force-yes install iptables
+          fi
+
           # Clear out all firewall rules to start.
           iptables -F
 
